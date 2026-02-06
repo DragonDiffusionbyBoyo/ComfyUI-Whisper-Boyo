@@ -1,81 +1,224 @@
-# ComfyUI Whisper
+# ComfyUI Whisper - Dragon Diffusion Enhanced Edition
 
-Transcribe audio and add subtitles to videos using [Whisper](https://github.com/openai/whisper/) in [ComfyUI](https://github.com/comfyanonymous/ComfyUI).
-Support multiple languages, prompt guidance and multiple whisper models.
+Enhanced fork of ComfyUI-Whisper with professional subtitle rendering and backend processing for large videos.
 
-**Last tested**: 2 January 2026 (ComfyUI v0.7.0@f2fda02 | Torch 2.9.1 | Triton 3.5.1 | Python 3.10.12 | RTX4090 | CUDA 13.0 | Debian 12)
+**Original:** [yuvraj108c/ComfyUI-Whisper](https://github.com/yuvraj108c/ComfyUI-Whisper)  
+**Enhanced by:** Dragon Diffusion UK Ltd
 
-![demo-image](https://github.com/yuvraj108c/ComfyUI-Whisper/blob/assets/recording.gif?raw=true)
+## 🚀 What's New in This Fork
 
-## ⭐ Support
-If you like my projects and wish to see updates and new features, please consider supporting me. It helps a lot! 
+### Backend Processing Mode
+- **Bypass ComfyUI Memory Limits**: Process videos of any length without loading to canvas
+- **Automatic Mode Selection**: Videos <120s use lite mode, ≥120s auto-switch to backend
+- **Manual Override**: Force lite or backend mode as needed
 
-[![ComfyUI-Depth-Anything-Tensorrt](https://img.shields.io/badge/ComfyUI--Depth--Anything--Tensorrt-blue?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Depth-Anything-Tensorrt)
-[![ComfyUI-Upscaler-Tensorrt](https://img.shields.io/badge/ComfyUI--Upscaler--Tensorrt-blue?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Upscaler-Tensorrt)
-[![ComfyUI-Dwpose-Tensorrt](https://img.shields.io/badge/ComfyUI--Dwpose--Tensorrt-blue?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Dwpose-Tensorrt)
-[![ComfyUI-Rife-Tensorrt](https://img.shields.io/badge/ComfyUI--Rife--Tensorrt-blue?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Rife-Tensorrt)
+### Advanced Subtitle Styling
+- **Multiple Rendering Engines**: FFmpeg (fast) or Pillow (flexible)
+- **Text Strokes/Outlines**: Configurable width and colour
+- **Shadow Effects**: Optional drop shadows for better readability
+- **Animation Styles**: Fade, slide up/down, zoom effects
+- **Position Presets**: Bottom center, top center, center, or custom positioning
+- **Custom Fonts**: Full TrueType font support
 
-[![ComfyUI-Whisper](https://img.shields.io/badge/ComfyUI--Whisper-gray?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Whisper)
-[![ComfyUI_InvSR](https://img.shields.io/badge/ComfyUI__InvSR-gray?style=flat-square)](https://github.com/yuvraj108c/ComfyUI_InvSR)
-[![ComfyUI-Thera](https://img.shields.io/badge/ComfyUI--Thera-gray?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Thera)
-[![ComfyUI-Video-Depth-Anything](https://img.shields.io/badge/ComfyUI--Video--Depth--Anything-gray?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-Video-Depth-Anything)
-[![ComfyUI-PiperTTS](https://img.shields.io/badge/ComfyUI--PiperTTS-gray?style=flat-square)](https://github.com/yuvraj108c/ComfyUI-PiperTTS)
-
-[![buy-me-coffees](https://i.imgur.com/3MDbAtw.png)](https://www.buymeacoffee.com/yuvraj108cZ)
-[![paypal-donation](https://i.imgur.com/w5jjubk.png)](https://paypal.me/yuvraj108c)
----
+### Professional Quality Output
+- **FFmpeg Integration**: Hardware-accelerated encoding, professional codecs
+- **Configurable Quality**: CRF control, preset selection
+- **Audio Preservation**: Audio streams copied without re-encoding
 
 ## Installation
 
-Install via [ComfyUI Manager](https://github.com/ltdrdata/ComfyUI-Manager)
+### Via ComfyUI Manager (Recommended)
+Install from custom node list (search for "Whisper Boyo" or "Dragon Diffusion")
+
+### Manual Installation
+```bash
+cd ComfyUI/custom_nodes/
+git clone https://github.com/DragonDiffusionbyBoyo/ComfyUI-Whisper-Boyo.git
+cd ComfyUI-Whisper-Boyo
+pip install -r requirements.txt
+```
 
 ## Usage
 
-Load this [workflow](https://github.com/yuvraj108c/ComfyUI-Whisper/blob/master/example_workflows/whisper_video_subtitles_workflow.json) into ComfyUI
+### New: Backend Processing Node
 
-Models are auto-downloaded to `/ComfyUI/models/stt/whisper`
+The **"Add Subtitles (Backend Mode)"** node adds all original features plus:
 
-## Supported Models
-'tiny.en', 'tiny', 'base.en', 'base', 'small.en', 'small', 'medium.en', 'medium', 'large-v1', 'large-v2', 'large-v3', 'large', 'large-v3-turbo', 'turbo'
+#### Required Inputs
+- `images`: Image tensor (from video load)
+- `alignment`: Whisper alignment data
+- `font_family`: Font selection from fonts directory
+- `font_size`: Size in pixels (10-500)
+- `font_color`: Text colour (name or hex)
+- `video_fps`: Frames per second
+- `processing_mode`: `auto`, `lite`, or `backend`
+- `renderer`: `ffmpeg` or `pillow`
 
-## Nodes
+#### Optional Inputs (Advanced Styling)
+- `video_path`: **Required for backend mode** - path to source video file
+- `output_path`: Custom output location (auto-generated if not specified)
+- `stroke_width`: Outline thickness (0-20 pixels)
+- `stroke_color`: Outline colour
+- `animation_style`: `none`, `fade`, `slide_up`, `slide_down`, `zoom`
+- `animation_duration`: Animation length in seconds (0.1-2.0)
+- `position_preset`: `bottom_center`, `top_center`, `center`, `custom`
+- `x_position`: Custom X coordinate
+- `y_position`: Custom Y offset/coordinate
 
-### Apply Whisper
+### Processing Modes
 
-Transcribe audio and get timestamps for each segment and word.
+#### Auto Mode (Recommended)
+```
+Videos <120 seconds  → Lite mode (in-memory processing)
+Videos ≥120 seconds  → Backend mode (file-based processing)
+```
 
-### Add Subtitles To Frames
+#### Lite Mode
+- Traditional ComfyUI processing
+- Results appear on canvas
+- Good for short clips, quick iteration
+- Memory limited
 
-Add subtitles on the video frames. You can specify font family, font color and x/y positions.
+#### Backend Mode
+- Headless processing
+- No canvas memory limits
+- Output saved to `/ComfyUI/output/whisper_backend/`
+- Required: `video_path` parameter must be set
+- Notification with output path returned
 
-### Add Subtitles To Background (Experimental)
+### Example Workflow
 
-Add subtitles like wordcloud on blank frames
+```
+Load Video
+    ↓
+Apply Whisper (transcribe)
+    ↓
+Add Subtitles (Backend Mode)
+    ├─ processing_mode: "auto"
+    ├─ renderer: "ffmpeg"
+    ├─ animation_style: "fade"
+    ├─ stroke_width: 2
+    ├─ stroke_color: "black"
+    └─ video_path: "/path/to/source.mp4"
+    ↓
+Output: Subtitled video in output folder
+```
 
-### Save SRT
+## Rendering Engines
 
-Export alignments as SRT files in `/ComfyUI/output/srt` directory
+### FFmpeg Renderer (Recommended)
+- **Fast**: Single-pass processing
+- **Professional**: Hardware acceleration support
+- **Effects**: Strokes, shadows, fades, slides, zoom
+- **Limitations**: Complex per-frame animations limited
 
-## Updates
-### 2 January 2026
-- Export alignments as SRT  
-- Add `torchcodec` to requirements
-### 27 August 2025
-- Merge https://github.com/yuvraj108c/ComfyUI-Whisper/pull/22 by [@francislabountyjr](https://github.com/francislabountyjr) for model patcher, more whisper models support, comfyui model directory support
-- Merge https://github.com/yuvraj108c/ComfyUI-Whisper/pull/18 by [@qy8502](https://github.com/qy8502) for Prompt Guidance support
-- Support YRDZST Semibold Font
-### 2 May 2025
-- Merge https://github.com/yuvraj108c/ComfyUI-Whisper/pull/15 by [@niknah](https://github.com/niknah) for language selection
+### Pillow Renderer
+- **Flexible**: Full programmatic control per frame
+- **Advanced**: Custom effects, gradients, complex animations
+- **Slower**: Frame-by-frame processing
+- **Use when**: Need effects FFmpeg can't provide
+
+## Architecture
+
+```
+ComfyUI Node (Configuration)
+    ↓
+Processing Mode Selection
+    ├─→ Lite Mode (<120s or user-selected)
+    │   └─→ Traditional PIL processing
+    │       └─→ Results to canvas
+    │
+    └─→ Backend Mode (≥120s or user-selected)
+        ├─→ Extract parameters
+        ├─→ Select renderer (FFmpeg/Pillow)
+        ├─→ Process video file directly
+        └─→ Output to folder
+            └─→ Notification with path
+```
+
+## Original Features (Preserved)
+
+All original nodes remain functional:
+- **Apply Whisper**: Audio transcription
+- **Add Subtitles To Frames**: Basic subtitle overlay
+- **Add Subtitles To Background**: Word cloud style
+- **Resize Cropped Subtitles**: Subtitle resizing
+- **Save SRT**: Export SRT subtitle files
+
+## Requirements
+
+```
+whisper
+torch
+torchvision
+opencv-python
+pillow
+numpy
+ffmpeg (system package)
+```
+
+## Performance Comparison
+
+| Mode | Processing Speed | Memory Usage | Max Video Length |
+|------|-----------------|--------------|------------------|
+| Original (PIL) | Slow | High | ~120 seconds |
+| Lite Mode | Moderate | High | ~120 seconds |
+| Backend FFmpeg | **Very Fast** | **Low** | **Unlimited** |
+| Backend Pillow | Moderate | Low | Unlimited |
+
+## Roadmap
+
+### Planned Features
+- [ ] SVG-based kinetic typography renderer
+- [ ] Pre-built animated font templates
+- [ ] Gradient text fills
+- [ ] Multiple subtitle tracks
+- [ ] Batch processing multiple videos
+- [ ] GPU-accelerated Pillow processing
+- [ ] WebM/VP9 output support
+- [ ] Real-time preview for backend mode
+
+## Technical Details
+
+### Backend Processing Flow
+1. Node receives config + alignment from ComfyUI
+2. Mode auto-selected based on video duration
+3. Backend processor initialised with renderer
+4. Video processed directly from file (no canvas load)
+5. Output written to configured/auto-generated path
+6. Notification returned to ComfyUI
+
+### FFmpeg Command Structure
+```bash
+ffmpeg -i input.mp4 \
+  -vf "drawtext=fontfile=font.ttf:text='word':fontsize=100:..." \
+  -c:a copy \
+  -c:v libx264 -preset medium -crf 23 \
+  output.mp4
+```
+
+### Memory Optimisation
+- Backend mode never loads full video into Python memory
+- Frames processed in streaming fashion when using Pillow
+- FFmpeg handles encoding in single pass
 
 ## Credits
 
-- [comfyanonymous/ComfyUI](https://github.com/comfyanonymous/ComfyUI)
-
-- [Kosinkadink/ComfyUI-VideoHelperSuite](https://github.com/Kosinkadink/ComfyUI-VideoHelperSuite)
-
-- [melMass/comfy_mtb](https://github.com/melMass/comfy_mtb)
+- **Original Project**: [yuvraj108c/ComfyUI-Whisper](https://github.com/yuvraj108c/ComfyUI-Whisper)
+- **Enhanced by**: Dragon Diffusion UK Ltd / Boyo
+- **Based on**: 
+  - [OpenAI Whisper](https://github.com/openai/whisper/)
+  - [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
 
 ## License
 
 [Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)](https://creativecommons.org/licenses/by-nc-sa/4.0/)
 
+## Support
+
+Issues, feature requests, and contributions welcome at:
+https://github.com/DragonDiffusionbyBoyo/ComfyUI-Whisper-Boyo/issues
+
+---
+
+**Dragon Diffusion UK Ltd** - Professional AI Solutions
