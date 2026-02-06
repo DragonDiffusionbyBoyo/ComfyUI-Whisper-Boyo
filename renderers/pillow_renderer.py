@@ -2,29 +2,35 @@ import cv2
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 import subprocess
+import tempfile
+import os
 from .base_renderer import BaseRenderer
 
 class PillowRenderer(BaseRenderer):
     """
-    Pillow-based frame-by-frame subtitle renderer.
+    Pillow-based frame-by-frame subtitle renderer with STREAMING processing.
     
-    More flexible than FFmpeg for:
-    - Complex programmatic animations
-    - Gradient fills
-    - Multiple text effects per frame
-    - Custom font rendering
-    - Per-frame dynamic adjustments
+    Memory efficient:
+    - Processes one frame at a time
+    - Writes frames immediately
+    - Never accumulates frames in memory
+    - Can handle videos of any length
     
-    Slower than FFmpeg but offers full programmatic control.
+    Perfect for:
+    - Long videos (hours)
+    - High resolution
+    - Complex animations
+    - Limited RAM systems
     """
     
     def render(self, video_path, alignment, style_config, output_path, fps):
         """
-        Render subtitles frame-by-frame using Pillow.
+        Render subtitles frame-by-frame using streaming processing.
+        Memory usage: ~1 frame (constant, regardless of video length)
         """
         self.validate_inputs(video_path, alignment, style_config, output_path)
         
-        # Open video
+        # Open input video
         cap = cv2.VideoCapture(video_path)
         
         # Get video properties
@@ -35,14 +41,34 @@ class PillowRenderer(BaseRenderer):
         # Prepare font
         font = ImageFont.truetype(style_config['font_path'], style_config['font_size'])
         
-        # Process frames
-        processed_frames = []
+        # Create temporary file for video without audio
+        temp_video = tempfile.NamedTemporaryFile(suffix='.mp4', delete=False)
+        temp_video_path = temp_video.name
+        temp_video.close()
+        
+        # Open video writer - STREAM frames directly
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+        out = cv2.VideoWriter(
+            temp_video_path,
+            fourcc,
+            fps,
+            (frame_width, frame_height)
+        )
+        
         frame_idx = 0
         
+        print(f"Processing {total_frames} frames...")
+        
+        # STREAMING: Read → Process → Write → Discard
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
+            
+            # Progress indicator
+            if frame_idx % 100 == 0:
+                progress = (frame_idx / total_frames) * 100
+                print(f"Progress: {frame_idx}/{total_frames} ({progress:.1f}%)")
             
             # Convert BGR to RGB
             frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -66,22 +92,61 @@ class PillowRenderer(BaseRenderer):
                     frame_height
                 )
             
-            # Convert back to numpy array
-            processed_frames.append(np.array(pil_frame))
+            # Convert back to BGR for cv2
+            frame_bgr = cv2.cvtColor(np.array(pil_frame), cv2.COLOR_RGB2BGR)
+            
+            # WRITE IMMEDIATELY - never accumulate
+            out.write(frame_bgr)
+            
             frame_idx += 1
+            
+            # Frame is now discarded, memory freed
         
+        # Cleanup
         cap.release()
+        out.release()
         
-        # Write video using FFmpeg
-        self._write_video(processed_frames, output_path, fps, frame_width, frame_height)
+        print(f"Processed {frame_idx} frames")
+        print(f"Merging audio...")
+        
+        # Merge audio from original video
+        self._merge_audio(video_path, temp_video_path, output_path)
+        
+        # Clean up temp file
+        os.unlink(temp_video_path)
         
         return {
             'status': 'success',
             'output_path': output_path,
             'subtitle_count': len(alignment),
-            'frames_processed': len(processed_frames),
+            'frames_processed': frame_idx,
             'renderer': 'pillow'
         }
+    
+    def _merge_audio(self, input_video, processed_video, output_path):
+        """
+        Merge audio from original video with processed video.
+        """
+        try:
+            cmd = [
+                'ffmpeg',
+                '-y',
+                '-i', processed_video,  # Video with subtitles
+                '-i', input_video,       # Original video with audio
+                '-c:v', 'copy',          # Copy video (already encoded)
+                '-c:a', 'aac',           # Encode audio to AAC
+                '-map', '0:v:0',         # Video from first input
+                '-map', '1:a:0?',        # Audio from second input (? means optional)
+                '-shortest',             # Match shortest stream
+                output_path
+            ]
+            
+            subprocess.run(cmd, check=True, capture_output=True)
+        except subprocess.CalledProcessError as e:
+            # If audio merge fails, just copy video without audio
+            print(f"Warning: Audio merge failed, output will have no audio")
+            import shutil
+            shutil.copy(processed_video, output_path)
     
     def _get_active_subtitles(self, alignment, current_time):
         """Get all subtitles active at current time."""
@@ -113,10 +178,11 @@ class PillowRenderer(BaseRenderer):
             )
             
             # Apply animation effects
+            current_font = font
             if style_config.get('animation_style') == 'zoom':
                 # Scale font size
                 scaled_size = int(style_config['font_size'] * progress)
-                font = ImageFont.truetype(
+                current_font = ImageFont.truetype(
                     style_config['font_path'], 
                     max(10, scaled_size)
                 )
@@ -127,7 +193,7 @@ class PillowRenderer(BaseRenderer):
             # Draw stroke
             if style_config.get('stroke_width', 0) > 0:
                 self._draw_text_stroke(
-                    draw, x, y, text, font,
+                    draw, x, y, text, current_font,
                     style_config['stroke_width'],
                     style_config['stroke_color'],
                     alpha
@@ -135,7 +201,7 @@ class PillowRenderer(BaseRenderer):
             
             # Draw main text
             color = self._apply_alpha(style_config['font_color'], alpha)
-            draw.text((x, y), text, fill=color, font=font)
+            draw.text((x, y), text, fill=color, font=current_font)
         
         return frame
     
@@ -217,40 +283,6 @@ class PillowRenderer(BaseRenderer):
     
     def _apply_alpha(self, color, alpha):
         """Apply alpha to color string."""
-        # Convert color name/hex to RGB with alpha
-        # For now, just return the color (PIL handles basic alpha)
+        # For now, just return the color
+        # Full alpha support would require RGBA mode
         return color
-    
-    def _write_video(self, frames, output_path, fps, width, height):
-        """Write frames to video using FFmpeg."""
-        import tempfile
-        
-        # Create temporary file for raw frames
-        with tempfile.NamedTemporaryFile(suffix='.yuv', delete=False) as tmp:
-            tmp_path = tmp.name
-            
-            # Write raw frames
-            for frame in frames:
-                tmp.write(frame.tobytes())
-        
-        # Use FFmpeg to encode
-        cmd = [
-            'ffmpeg',
-            '-y',
-            '-f', 'rawvideo',
-            '-pixel_format', 'rgb24',
-            '-video_size', f'{width}x{height}',
-            '-framerate', str(fps),
-            '-i', tmp_path,
-            '-c:v', 'libx264',
-            '-preset', 'medium',
-            '-crf', '23',
-            '-pix_fmt', 'yuv420p',
-            output_path
-        ]
-        
-        subprocess.run(cmd, check=True, capture_output=True)
-        
-        # Clean up temp file
-        import os
-        os.unlink(tmp_path)

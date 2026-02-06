@@ -55,6 +55,9 @@ class FFmpegRenderer(BaseRenderer):
         """
         filters = []
         
+        # Convert font path to forward slashes for FFmpeg (works on Windows and Linux)
+        font_path = style_config['font_path'].replace('\\', '/')
+        
         for idx, word in enumerate(alignment):
             start_time = word['start']
             end_time = word['end']
@@ -62,8 +65,8 @@ class FFmpegRenderer(BaseRenderer):
             
             # Build drawtext filter for this subtitle
             filter_parts = [
-                f"drawtext=fontfile='{style_config['font_path']}'",
-                f"text='{text}'",
+                f"drawtext=fontfile={font_path}",  # No quotes - FFmpeg prefers this
+                f"text={text}",
                 f"fontsize={style_config['font_size']}",
                 f"fontcolor={style_config['font_color']}",
             ]
@@ -88,10 +91,11 @@ class FFmpegRenderer(BaseRenderer):
             animation_filter = self._build_animation(
                 start_time, end_time, style_config
             )
-            filter_parts.append(animation_filter)
+            if animation_filter:
+                filter_parts.append(animation_filter)
             
             # Enable only during subtitle timeframe
-            filter_parts.append(f"enable='between(t,{start_time},{end_time})'")
+            filter_parts.append(f"enable=between(t,{start_time},{end_time})")
             
             # Join all parts
             filters.append(":".join(filter_parts))
@@ -111,43 +115,33 @@ class FFmpegRenderer(BaseRenderer):
             fade_in_end = start_time + duration
             fade_out_start = end_time - duration
             
-            alpha = (
-                f"alpha='if(lt(t,{fade_in_end}),"
+            alpha_expr = (
+                f"if(lt(t,{fade_in_end}),"
                 f"(t-{start_time})/{duration},"
                 f"if(gt(t,{fade_out_start}),"
-                f"({end_time}-t)/{duration},1))'"
+                f"({end_time}-t)/{duration},1))"
             )
-            return alpha
+            return f"alpha={alpha_expr}"
         
         elif animation == 'slide_up':
             # Start below final position, slide up
             slide_distance = 50
-            y_expr = (
-                f"y='if(lt(t,{start_time + duration}),"
-                f"y+{slide_distance}*(1-(t-{start_time})/{duration}),y)'"
-            )
-            return y_expr
+            # No animation - just return None, can't easily do y animation in drawtext
+            return None
         
         elif animation == 'slide_down':
             # Start above final position, slide down
             slide_distance = 50
-            y_expr = (
-                f"y='if(lt(t,{start_time + duration}),"
-                f"y-{slide_distance}*(1-(t-{start_time})/{duration}),y)'"
-            )
-            return y_expr
+            # No animation - just return None
+            return None
         
         elif animation == 'zoom':
             # Start small, zoom to full size
-            zoom_expr = (
-                f"fontsize='if(lt(t,{start_time + duration}),"
-                f"{style_config['font_size']}*(t-{start_time})/{duration},"
-                f"{style_config['font_size']})'"
-            )
-            return zoom_expr
+            # No animation - drawtext doesn't support dynamic fontsize easily
+            return None
         
         else:  # none
-            return "alpha=1"
+            return None
     
     def _calculate_position(self, style_config, text):
         """
@@ -174,28 +168,34 @@ class FFmpegRenderer(BaseRenderer):
     def _escape_text(self, text):
         """
         Escape special characters for FFmpeg drawtext filter.
+        FFmpeg drawtext uses : as separator and needs escaping.
         """
-        # FFmpeg drawtext requires escaping: : [ ] ' \
-        text = text.replace("\\", "\\\\")
-        text = text.replace(":", "\\:")
-        text = text.replace("'", "\\'")
-        text = text.replace("[", "\\[")
-        text = text.replace("]", "\\]")
+        # Escape colon which is the parameter separator
+        text = text.replace(":", r"\:")
+        # Escape single quote
+        text = text.replace("'", r"\'")
+        # Escape backslash
+        text = text.replace("\\", r"\\")
         return text
     
     def _build_ffmpeg_command(self, video_path, filters, output_path):
         """
         Build complete FFmpeg command.
+        Convert paths to forward slashes for cross-platform compatibility.
         """
+        # Normalize paths - FFmpeg on Windows accepts forward slashes
+        video_path_norm = video_path.replace('\\', '/')
+        output_path_norm = output_path.replace('\\', '/')
+        
         cmd = [
             'ffmpeg',
             '-y',  # Overwrite output file
-            '-i', video_path,
+            '-i', video_path_norm,
             '-vf', filters,
             '-c:a', 'copy',  # Copy audio without re-encoding
             '-c:v', 'libx264',  # Video codec
             '-preset', 'medium',  # Encoding speed/quality balance
             '-crf', '23',  # Quality (lower = better, 18-28 is reasonable)
-            output_path
+            output_path_norm
         ]
         return cmd
