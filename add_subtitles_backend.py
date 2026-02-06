@@ -43,30 +43,8 @@ class AddSubtitlesBackendNode:
                 "font_color": ("STRING", {
                     "default": "white"
                 }),
-                "video_fps": ("FLOAT", {
-                    "default": 24.0,
-                    "step": 1,
-                    "display": "number"
-                }),
-                "processing_mode": (["auto", "lite", "backend"], {
-                    "default": "auto"
-                }),
-                "renderer": (["ffmpeg", "pillow"], {
-                    "default": "ffmpeg"
-                }),
-            },
-            "optional": {
-                "video_path": ("STRING", {
-                    "default": "",
-                    "multiline": False
-                }),
-                "output_path": ("STRING", {
-                    "default": "",
-                    "multiline": False
-                }),
-                # Advanced styling
                 "stroke_width": ("INT", {
-                    "default": 0,
+                    "default": 3,
                     "min": 0,
                     "max": 20,
                     "step": 1
@@ -74,18 +52,14 @@ class AddSubtitlesBackendNode:
                 "stroke_color": ("STRING", {
                     "default": "black"
                 }),
-                "animation_style": (["none", "fade", "slide_up", "slide_down", "zoom"], {
-                    "default": "fade"
-                }),
+                "animation_style": (["none", "fade", "slide_up", "slide_down", "zoom"],),
                 "animation_duration": ("FLOAT", {
                     "default": 0.3,
                     "min": 0.1,
                     "max": 2.0,
                     "step": 0.1
                 }),
-                "position_preset": (["bottom_center", "top_center", "center", "custom"], {
-                    "default": "bottom_center"
-                }),
+                "position_preset": (["bottom_center", "top_center", "center", "custom"],),
                 "x_position": ("INT", {
                     "default": 0,
                     "step": 10,
@@ -96,17 +70,34 @@ class AddSubtitlesBackendNode:
                     "step": 10,
                     "display": "number"
                 }),
+                "video_fps": ("FLOAT", {
+                    "default": 24.0,
+                    "step": 1,
+                    "display": "number"
+                }),
+                "processing_mode": (["auto", "lite", "backend"],),
+                "renderer": (["ffmpeg", "pillow"],),
+                "video_path": ("STRING", {
+                    "default": "",
+                    "multiline": False
+                }),
+                "output_path": ("STRING", {
+                    "default": "",
+                    "multiline": False
+                }),
             }
         }
 
     RETURN_TYPES = ("IMAGE", "STRING",)
     RETURN_NAMES = ("images", "output_info",)
     FUNCTION = "add_subtitles"
-    CATEGORY = "whisper"
+    CATEGORY = "whisper/boyo"
     OUTPUT_NODE = True
 
-    def add_subtitles(self, images, alignment, font_family, font_size, font_color, 
-                     video_fps, processing_mode, renderer, **kwargs):
+    def add_subtitles(self, images, alignment, font_family, font_size, font_color,
+                     stroke_width, stroke_color, animation_style, animation_duration,
+                     position_preset, x_position, y_position, video_fps, 
+                     processing_mode, renderer, video_path, output_path):
         """
         Main processing function with automatic mode selection.
         """
@@ -123,7 +114,8 @@ class AddSubtitlesBackendNode:
         
         # Build style configuration
         style_config = self._build_style_config(
-            font_family, font_size, font_color, **kwargs
+            font_family, font_size, font_color, stroke_width, stroke_color,
+            animation_style, animation_duration, position_preset, x_position, y_position
         )
         
         if mode == "lite":
@@ -132,23 +124,25 @@ class AddSubtitlesBackendNode:
             )
         else:
             return self._process_backend_mode(
-                images, alignment, style_config, video_fps, renderer, **kwargs
+                images, alignment, style_config, video_fps, renderer, video_path, output_path
             )
     
-    def _build_style_config(self, font_family, font_size, font_color, **kwargs):
+    def _build_style_config(self, font_family, font_size, font_color, 
+                           stroke_width, stroke_color, animation_style, 
+                           animation_duration, position_preset, x_position, y_position):
         """Build unified style configuration dictionary."""
         return {
             'font_family': font_family,
             'font_path': os.path.join(FONT_DIR, font_family),
             'font_size': font_size,
             'font_color': font_color,
-            'stroke_width': kwargs.get('stroke_width', 0),
-            'stroke_color': kwargs.get('stroke_color', 'black'),
-            'animation_style': kwargs.get('animation_style', 'none'),
-            'animation_duration': kwargs.get('animation_duration', 0.3),
-            'position_preset': kwargs.get('position_preset', 'bottom_center'),
-            'x_position': kwargs.get('x_position', 0),
-            'y_position': kwargs.get('y_position', 100),
+            'stroke_width': stroke_width,
+            'stroke_color': stroke_color,
+            'animation_style': animation_style,
+            'animation_duration': animation_duration,
+            'position_preset': position_preset,
+            'x_position': x_position,
+            'y_position': y_position,
         }
     
     def _process_lite_mode(self, images, alignment, style_config, video_fps):
@@ -226,13 +220,11 @@ class AddSubtitlesBackendNode:
         return (tensor_images, info)
     
     def _process_backend_mode(self, images, alignment, style_config, video_fps, 
-                              renderer, **kwargs):
+                              renderer, video_path, output_path):
         """
         Process video in backend without loading to canvas.
         Handles large videos by bypassing ComfyUI memory limits.
         """
-        video_path = kwargs.get('video_path', '')
-        output_path = kwargs.get('output_path', '')
         
         # Validate paths
         if not video_path or not os.path.exists(video_path):

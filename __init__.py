@@ -4,8 +4,9 @@ from .add_subtitles_to_background import AddSubtitlesToBackgroundNode
 from .resize_cropped_subtitles import ResizeCroppedSubtitlesNode
 from .save_srt import SaveSRTNode
 
-# Boyo's enhanced backend processing node
+# Boyo's enhanced nodes
 from .add_subtitles_backend import AddSubtitlesBackendNode
+from .add_subtitles_lite import AddSubtitlesLiteNode
 
 NODE_CLASS_MAPPINGS = { 
     # Original nodes
@@ -15,8 +16,9 @@ NODE_CLASS_MAPPINGS = {
     "Resize Cropped Subtitles": ResizeCroppedSubtitlesNode,
     "Save SRT": SaveSRTNode,
     
-    # Enhanced backend node
-    "Add Subtitles Backend": AddSubtitlesBackendNode,
+    # Boyo's enhanced nodes - prefixed for easy discovery
+    "BoyoSubtitlesBackend": AddSubtitlesBackendNode,
+    "BoyoSubtitlesLite": AddSubtitlesLiteNode,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -27,8 +29,9 @@ NODE_DISPLAY_NAME_MAPPINGS = {
      "Resize Cropped Subtitles": "Resize Cropped Subtitles",
      "Save SRT": "Save SRT",
      
-     # Enhanced node
-     "Add Subtitles Backend": "Add Subtitles (Backend Mode)",
+     # Boyo's nodes - clear labeling
+     "BoyoSubtitlesBackend": "Boyo Subtitles (Backend)",
+     "BoyoSubtitlesLite": "Boyo Subtitles (Lite)",
 }
 
 __all__ = ['NODE_CLASS_MAPPINGS', 'NODE_DISPLAY_NAME_MAPPINGS']
